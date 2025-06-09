@@ -2,9 +2,9 @@
 A step-by-step project to provision, secure, and expose a Kubernetes cluster using kubeadm. It includes RBAC, network policies, ingress with TLS, and production-ready configurations — ideal for showcasing hands-on Kubernetes skills.
 
 #  Secure and Scalable Kubernetes Cluster Setup with kubeadm
-SSH into the Master EC2 server
+1. SSH into the Master EC2 server
 
-Disable Swap using the below commands
+2-Disable Swap using the below commands
 
 swapoff -a
 sudo sed -i '/ swap / s/^\(.*\)$/#\1/g' /etc/fstab
