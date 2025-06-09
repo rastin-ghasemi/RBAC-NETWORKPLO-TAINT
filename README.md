@@ -2,13 +2,17 @@
 A step-by-step project to provision, secure, and expose a Kubernetes cluster using kubeadm. It includes RBAC, network policies, ingress with TLS, and production-ready configurations — ideal for showcasing hands-on Kubernetes skills.
 
 #  Secure and Scalable Kubernetes Cluster Setup with kubeadm
-1. SSH into the Master EC2 server
+### Run the below steps on the Master VM
+1) SSH into the Master EC2 server
 
-2-Disable Swap using the below commands
-
+2)  Disable Swap using the below commands
+```bash
 swapoff -a
 sudo sed -i '/ swap / s/^\(.*\)$/#\1/g' /etc/fstab
-Forwarding IPv4 and letting iptables see bridged traffic
+```
+3) Forwarding IPv4 and letting iptables see bridged traffic
+
+```
 cat <<EOF | sudo tee /etc/modules-load.d/k8s.conf
 overlay
 br_netfilter
@@ -33,7 +37,11 @@ lsmod | grep overlay
 
 # Verify that the net.bridge.bridge-nf-call-iptables, net.bridge.bridge-nf-call-ip6tables, and net.ipv4.ip_forward system variables are set to 1 in your sysctl config by running the following command:
 sysctl net.bridge.bridge-nf-call-iptables net.bridge.bridge-nf-call-ip6tables net.ipv4.ip_forward
-Install container runtime
+```
+
+4) Install container runtime
+
+```
 curl -LO https://github.com/containerd/containerd/releases/download/v1.7.14/containerd-1.7.14-linux-amd64.tar.gz
 sudo tar Cxzvf /usr/local containerd-1.7.14-linux-amd64.tar.gz
 curl -LO https://raw.githubusercontent.com/containerd/containerd/main/containerd.service
@@ -47,14 +55,26 @@ sudo systemctl enable --now containerd
 
 # Check that containerd service is up and running
 systemctl status containerd
-Install runc
+```
+
+5) Install runc
+
+```
 curl -LO https://github.com/opencontainers/runc/releases/download/v1.1.12/runc.amd64
 sudo install -m 755 runc.amd64 /usr/local/sbin/runc
-install cni plugin
+```
+
+6) install cni plugin
+
+```
 curl -LO https://github.com/containernetworking/plugins/releases/download/v1.5.0/cni-plugins-linux-amd64-v1.5.0.tgz
 sudo mkdir -p /opt/cni/bin
 sudo tar Cxzvf /opt/cni/bin cni-plugins-linux-amd64-v1.5.0.tgz
-Install kubeadm, kubelet and kubectl
+```
+
+7) Install kubeadm, kubelet and kubectl
+
+```
 sudo apt-get update
 sudo apt-get install -y apt-transport-https ca-certificates curl gpg
 
@@ -68,31 +88,73 @@ sudo apt-mark hold kubelet kubeadm kubectl
 kubeadm version
 kubelet --version
 kubectl version --client
-Note: The reason we are installing 1.29, so that in one of the later task, we can upgrade the cluster to 1.30
+```
+>Note: The reason we are installing 1.29, so that in one of the later task, we can upgrade the cluster to 1.30
 
-Configure crictl to work with containerd
-sudo crictl config runtime-endpoint unix:///var/run/containerd/containerd.sock
+8) Configure `crictl` to work with `containerd`
 
-initialize control plane
+`sudo crictl config runtime-endpoint unix:///var/run/containerd/containerd.sock`
+
+9) initialize control plane
+
+```
 sudo kubeadm init --pod-network-cidr=192.168.0.0/16 --apiserver-advertise-address=172.31.89.68 --node-name master
-Note: Copy the copy to the notepad that was generated after the init command completion, we will use that later.
+```
+>Note: Copy the copy to the notepad that was generated after the init command completion, we will use that later.
 
-Prepare kubeconfig
+10) Prepare `kubeconfig`
+
+```bash
 mkdir -p $HOME/.kube
 sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
 sudo chown $(id -u):$(id -g) $HOME/.kube/config
-Install calico
+```
+11) Install calico 
+
+```bash
 kubectl create -f https://raw.githubusercontent.com/projectcalico/calico/v3.28.0/manifests/tigera-operator.yaml
 
 curl https://raw.githubusercontent.com/projectcalico/calico/v3.28.0/manifests/custom-resources.yaml -O
 
 kubectl apply -f custom-resources.yaml
-Perform the below steps on both the worker nodes
-Perform steps 1-8 on both the nodes
-Run the command generated in step 9 on the Master node which is similar to below
+```
+
+### Perform the below steps on both the worker nodes
+
+- Perform steps 1-8 on both the nodes
+- Run the command generated in step 9 on the Master node which is similar to below
+
+```
 sudo kubeadm join 172.31.71.210:6443 --token xxxxx --discovery-token-ca-cert-hash sha256:xxx
-If you forgot to copy the command, you can execute below command on master node to generate the join command again
+```
+- If you forgot to copy the command, you can execute below command on master node to generate the join command again
+
+```
 kubeadm token create --print-join-command
+```
+
+## Validation
+
+If all the above steps were completed, you should be able to run `kubectl get nodes` on the master node, and it should return all the 3 nodes in ready status.
+
+Also, make sure all the pods are up and running by using the command as below:
+` kubectl get pods -A`
+
+>If your Calico-node pods are not healthy, please perform the below steps:
+
+- Disabled source/destination checks for master and worker nodes too.
+- Configure Security group rules, Bidirectional, all hosts,TCP 179(Attach it to master and worker nodes)
+- Update the ds using the command:
+`kubectl set env daemonset/calico-node -n calico-system IP_AUTODETECTION_METHOD=interface=ens5`
+Where ens5 is your default interface, you can confirm by running `ifconfig` on all the machines
+- IP_AUTODETECTION_METHOD  is set to first-found to let Calico automatically select the appropriate interface on each node.
+- Wait for some time or delete the calico-node pods and it should be up and running.
+- If you are still facing the issue, you can follow the below workaround
+
+- Install Calico CNI addon using manifest instead of Operator and CR, and all calico pods will be up and running 
+`kubectl apply -f https://docs.projectcalico.org/manifests/calico.yaml`
+
+This is not the latest version of calico though(v.3.25). This deploys CNI in kube-system NS. 
 
 # NetworkPolicies 
 # TLS Ingress
